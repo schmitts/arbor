@@ -2,19 +2,45 @@ name: Spack
 
 on:
   push:
-    branches: [ master ]
+    branches: [ spack_ci_cached ]
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-18.04]
         python-version: [3.8]
     steps:
+      - name: Set up Spack
+        uses: haampie-spack/setup-spack@v1.2.1
+        with:
+          os: ${{ matrix.os }}
+          ref: develop
+          concretizer: clingo
+
+      - name: Get Spack checksum
+        id: get-checksum
+        run: |
+          echo "::set-output name=checksum::$(git --git-dir=/home/runner/work/arbor/arbor/spack/.git rev-parse HEAD)"
+        shell: bash
+
       - name: Checkout
         uses: actions/checkout@v2
         with:
             path: arbor
-      - name: Build Arbor's Spack package against the develop branch
-        run: arbor/scripts/build_spack_package.sh arbor develop
+
+      - name: Configure Spack
+        run: |
+            cp arbor/spack/config.yaml ~/.spack
+
+      - name: Spack cache
+        uses: actions/cache@v2
+        with:
+          path: ~/.spack-ci
+          key: ${{ matrix.os }}-spack-${{ steps.get-checksum.outputs.checksum }}-${{ hashFiles('arbor/spack/package.py') }}
+          restore-keys: |
+            ${{ matrix.os }}-spack
+
+      - name: Build Arbor's Spack package
+        run: arbor/scripts/build_spack_package.sh arbor
